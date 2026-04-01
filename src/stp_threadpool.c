@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #include <stdlib.h>
 #include <pthread.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "stp_threadpool.h"
 #include "stp_queue.h"
@@ -32,18 +33,35 @@ typedef struct {
     pthread_cond_t cond_notify; /*Cond variable*/
     pthread_t *threads; /*Actual threads*/
     stp_queue_t *pq; /*Priority queue*/
-    uint8_t total_threads; /*Total threads used*/
+    long total_threads; /*Total threads used*/
     uint16_t queue_size; /*Size of queue*/
-}threadpool_t;
+}stp_tp_t;
 
-threadpool_t *threadpool_create(uint16_t qsize_input){
-    threadpool_t *pool = malloc(sizeof(*pool));
+//TODO: add macros flag for return value
+
+stp_tp_t *stp_tp_create(uint16_t qsize_input){
+    stp_tp_t *pool = malloc(sizeof(*pool));
     if (pool == NULL) return NULL;
     
     pool.pq = stp_pq_create(qsize_input);
     assert(pool.pq != NULL);
 
-
+    pool.total_threads = GET_TOTSYS_THREAD;
     
+    pool.threads = (pthread_t *) malloc(sizeof(pthread_t) * pool.total_threads);
 
+    if (pthread_mutex_init(&pool.lock, NULL) != 0 ||
+        pthread_cond_init(&pool.cond_notify, NULL) != 0){
+        
+        return NULL;
+    }
+    
+    return pool;
 }
+
+int stp_tp_t stp_tp_add(void (*task)(void *), void *args){
+    
+    
+}
+
+

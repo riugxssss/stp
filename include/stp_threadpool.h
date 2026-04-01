@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #define IMMEDIATE_SHUTDOWN 10
 #define GRACEFUL_SHUTDOWN  11
 
-typedef struct threadpool_t;
+typedef struct stp_tp_t;
 
 
 
