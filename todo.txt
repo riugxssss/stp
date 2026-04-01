@@ -1,0 +1,5 @@
+-------------TODO FILE-------------
+
+1) Add a handler error and improve errors handling
+2) Complete the basics of Thread Pool (add, destroy, freepool)
+3) Add macros for return value
