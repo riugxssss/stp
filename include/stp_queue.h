@@ -40,7 +40,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.*/
 #   define DEFAULT_SIZE ((1 << 3) *  (1 << 9)) //The same as 8 * 512 = 4096
 #else
 #   define DEFAULT_SIZE ((1 << 3) *  (1 << 6)) //The same as 8 * 64 = 512
- 
+#endif
+
 /*--RETURN MACROS*/
 #define STP_PEEK_FAIL 0x00
 
@@ -108,14 +109,14 @@ typedef struct stp_queue {
 /*---- QUEUE FUNCTIONS ----*/
 int stp_check_property(stp_queue_t *pq);
 stp_queue_t *stp_pq_create(uint16_t queue_size);
-stp_item_t *stp_peek(stp_queue_t *pq);
-int stp_insert(stp_queue_t *pq, void *task, uint16_t priority);
-int stp_remove(stp_queue_t *pq);
-void stp_destroyq(stp_queue_t **pq);
-int stp_check_full(stp_queue_t *pq);
+stp_item_t *stp_pq_peek(stp_queue_t *pq);
+int stp_pq_insert(stp_queue_t *pq, void (*task)(void *), void *args, uint16_t priority);
+int stp_pq_remove(stp_queue_t *pq);
+void stp_pq_destroyq(stp_queue_t **pq);
+int stp_pq_check_full(stp_queue_t *pq);
 
 #ifdef __DEBUG__
-    void stp_printq(stp_queue_t *pq);
+    void stp_pq_printq(stp_queue_t *pq);
 #endif
 
 

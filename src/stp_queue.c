@@ -20,10 +20,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.*/
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "stp_queue.h"
+#include "../include/stp_queue.h"
 
 //Function declaration
-int stp_check_property(stp_queue_t *pq);
+int stp_pq_check_property(stp_queue_t *pq);
 
 
 /*A function that initialize the struct and allocate
@@ -52,7 +52,7 @@ stp_queue_t *stp_pq_create(uint16_t queue_size){
 /*This function simply get the struct with the highest priority
  * in the queue, it means we return the root of the struct*/
 
-stp_item_t *stp_peek(stp_queue_t *pq){
+stp_item_t *stp_pq_peek(stp_queue_t *pq){
     if (!pq || !pq->pq_arr || pq->tot_task == 0)
         return STP_PEEK_FAIL;
     return &pq->pq_arr[0];
@@ -61,8 +61,8 @@ stp_item_t *stp_peek(stp_queue_t *pq){
 /*A simple swap function used for swapping
  * priority task value in the queue*/
 
-static void stp_swap(stp_item_t *ptr1, stp_item_t *ptr2){
-    spt_item_t tmp_pr = *ptr1;
+static void stp_pq_swap(stp_item_t *ptr1, stp_item_t *ptr2){
+    stp_item_t tmp_pr = *ptr1;
     *ptr1 = *ptr2;
     *ptr2 = tmp_pr;
 }
@@ -113,24 +113,26 @@ static void stp_swap(stp_item_t *ptr1, stp_item_t *ptr2){
  * swapping the entire struct, the priority and the task you can find the way below
  * */
 
-int stp_insert(stp_queue_t *pq, void (*task)(void *), void *args,uint16_t priority){
+int stp_pq_insert(stp_queue_t *pq, void (*task)(void *), void *args, uint16_t priority){
 
-    /*We check if the task really exist and the priority respect the limit*/
-    if (task == NULL || priority > LIMITED_SIZE) 
+    /*We check if the task really exist*/
+    if (task == NULL || args == NULL){
         return STP_I_FAIL;
-    
+    }
+
+
     //First case where the total task = to 0
     if (pq->tot_task == 0){
         pq->tot_task++;
         pq->pq_arr[0].task = task;
-        pq->pq_arr[0].priority = priority;
+        pq->pq_arr[0].priority_task = priority;
         pq->pq_arr[0].args = args;
         return STP_I_SUCC;
     }
 
     //If the first case condition fail, puts the paramers in the struct (Possible property violation)
     pq->pq_arr[pq->tot_task].task = task;
-    pq->pq_arr[pq->tot_task].priority = priority;
+    pq->pq_arr[pq->tot_task].priority_task = priority;
     pq->pq_arr[pq->tot_task].args = args;
     pq->tot_task++;
 
@@ -139,7 +141,7 @@ int stp_insert(stp_queue_t *pq, void (*task)(void *), void *args,uint16_t priori
     int parent_idx;
 
     //We fast check if the property is valid, if it is no need to continue  
-    if (stp_check_property(pq) == STP_MH_SUCC){
+    if (stp_pq_check_property(pq) == STP_MH_SUCC){
         return STP_I_SUCC;
     }
 
@@ -150,7 +152,7 @@ int stp_insert(stp_queue_t *pq, void (*task)(void *), void *args,uint16_t priori
     do {
         parent_idx = GET_PARENT(tmptot);
 
-        if (pq->pq_arr[parent_idx].priority <= pq->pq_arr[tmptot].priority){
+        if (pq->pq_arr[parent_idx].priority_task <= pq->pq_arr[tmptot].priority_task){
             break;
         }else {
             /*We change the array layout swapping 2 memory cells
@@ -208,7 +210,7 @@ int stp_insert(stp_queue_t *pq, void (*task)(void *), void *args,uint16_t priori
  *
  * */
 
-int stp_remove(stp_queue_t *pq){
+int stp_pq_remove(stp_queue_t *pq){
     if (pq == NULL || pq->tot_task == 0)
         return STP_R_FAIL;
     
@@ -227,9 +229,9 @@ int stp_remove(stp_queue_t *pq){
         right = GET_RIGHT_C(start_idx);
         smallest = start_idx;
     
-        if (left < tmptot && pq->pq_arr[left].priority < pq->pq_arr[smallest].priority)
+        if (left < tmptot && pq->pq_arr[left].priority_task < pq->pq_arr[smallest].priority_task)
             smallest = left;
-        if(right < tmptot && pq->pq_arr[right].priority < pq->pq_arr[smallest].priority)
+        if(right < tmptot && pq->pq_arr[right].priority_task < pq->pq_arr[smallest].priority_task)
             smallest = right;
         
         if (smallest == start_idx) break;
@@ -244,11 +246,11 @@ int stp_remove(stp_queue_t *pq){
 /*The destroy function of the queue it will be called when the 
  * thread pool ends*/
 
-void stp_destroyq(stp_queue_t **pq){
+void stp_pq_destroyq(stp_queue_t **pq){
     /*if we pass in the free function a NULL value
      * it will work fine -> https://it.cppreference.com/w/c/memory/c/free*/
     
-    if (pq == NULL || *pq == NULL ||pq->tot_task == 0)
+    if (pq == NULL || *pq == NULL || (*pq)->tot_task == 0)
         return; 
 
     free((*pq)->pq_arr);
@@ -262,16 +264,16 @@ void stp_destroyq(stp_queue_t **pq){
  * if its not -> return MH_FAIL
  *
  * */
-int stp_check_property(stp_queue_t *pq){
+int stp_pq_check_property(stp_queue_t *pq){
     if (pq == NULL || pq->tot_task == 0)
         return STP_MH_FAIL;
     for (int k = 0;k < pq->tot_task; k++){
         int left  =  GET_LEFT_C(k);
         int right =  GET_RIGHT_C(k);
 
-        if (left < pq->tot_task && pq->pq_arr[k] > pq->pq_arr[left])
+        if (left < pq->tot_task && pq->pq_arr[k].priority_task > pq->pq_arr[left].priority_task)
             return STP_MH_FAIL;
-        if (right < pq->tot_task && pq->pq_arr[k] > pq->pq_arr[right])
+        if (right < pq->tot_task && pq->pq_arr[k].priority_task > pq->pq_arr[right].priority_task)
             return STP_MH_FAIL;
     }
     
@@ -279,7 +281,7 @@ int stp_check_property(stp_queue_t *pq){
 }
 
 
-int stp_check_full(stp_queue_t *pq){
+int stp_pq_check_full(stp_queue_t *pq){
     return pq->queue_size == pq->tot_task;
 }
 
@@ -290,7 +292,7 @@ int stp_check_full(stp_queue_t *pq){
 
 #ifdef __DEBUG__
 
-void stp_printq(stp_queue_t *pq){
+void stp_pq_printq(stp_queue_t *pq){
     if (pq == NULL || pq->pq_arr == NULL)
         return;
 
