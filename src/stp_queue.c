@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.*/
 #include <stdint.h>
 
 #include "../include/stp_queue.h"
+#include "../include/stp_helper.h"
 
 //Function declaration
 int stp_pq_check_property(stp_queue_t *pq);
@@ -32,7 +33,7 @@ int stp_pq_check_property(stp_queue_t *pq);
 stp_queue_t *stp_pq_create(uint16_t queue_size){
 
     stp_queue_t *pq = malloc(sizeof(*pq));
-    if (pq == NULL) return NULL; /*ENOMEM occures*/
+    CHECK_ALLOC(pq);
 
     pq->tot_task = 0; //Init to 0 the variable
     
@@ -44,7 +45,7 @@ stp_queue_t *stp_pq_create(uint16_t queue_size){
         pq->queue_size = queue_size;
     }
 
-    if (pq->pq_arr == NULL) return NULL; 
+    CHECK_ALLOC(pq->pq_arr);
 
     return pq;
 }
@@ -61,7 +62,7 @@ stp_item_t *stp_pq_peek(stp_queue_t *pq){
 /*A simple swap function used for swapping
  * priority task value in the queue*/
 
-static void stp_pq_swap(stp_item_t *ptr1, stp_item_t *ptr2){
+static inline void stp_pq_swap(stp_item_t *ptr1, stp_item_t *ptr2){
     stp_item_t tmp_pr = *ptr1;
     *ptr1 = *ptr2;
     *ptr2 = tmp_pr;
@@ -116,7 +117,7 @@ static void stp_pq_swap(stp_item_t *ptr1, stp_item_t *ptr2){
 int stp_pq_insert(stp_queue_t *pq, void (*task)(void *), void *args, uint16_t priority){
 
     /*We check if the task really exist*/
-    if (task == NULL || args == NULL){
+    if (task == NULL){
         return STP_I_FAIL;
     }
 
@@ -168,7 +169,7 @@ int stp_pq_insert(stp_queue_t *pq, void (*task)(void *), void *args, uint16_t pr
              * operation is: shallow copy
              *
              * and we do the operation swap like in the function.*/
-            stp_swap(
+            stp_pq_swap(
                     &pq->pq_arr[parent_idx],
                     &pq->pq_arr[tmptot]
                     );
@@ -236,7 +237,7 @@ int stp_pq_remove(stp_queue_t *pq){
         
         if (smallest == start_idx) break;
 
-        stp_swap(&pq->pq_arr[start_idx], &pq->pq_arr[smallest]);
+        stp_pq_swap(&pq->pq_arr[start_idx], &pq->pq_arr[smallest]);
         start_idx = smallest;
     }
     
@@ -304,5 +305,3 @@ void stp_pq_printq(stp_queue_t *pq){
 }
 
 #endif
-
-

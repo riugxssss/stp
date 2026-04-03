@@ -35,11 +35,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.*/
  * exist, that means we are in modern systems (64 bit CPU)*/
  
 #if defined(__x86_64__)
-#   define DEFAULT_SIZE ((1 << 3) *  (1 << 12)) //The same as 8 * 4096 = 32768
+#   define DEFAULT_SIZE 65535 //uint16_t max number rappresentable
 #elif defined(__arm__)
-#   define DEFAULT_SIZE ((1 << 3) *  (1 << 9)) //The same as 8 * 512 = 4096
+#   define DEFAULT_SIZE 256 * 16 //uint8_t * 16 = 4096
 #else
-#   define DEFAULT_SIZE ((1 << 3) *  (1 << 6)) //The same as 8 * 64 = 512
+#   define DEFAULT_SIZE 256 * 8 //uint8_t * 8 = 2048
 #endif
 
 /*--RETURN MACROS*/
@@ -115,7 +115,7 @@ int stp_pq_remove(stp_queue_t *pq);
 void stp_pq_destroyq(stp_queue_t **pq);
 int stp_pq_check_full(stp_queue_t *pq);
 
-#ifdef __DEBUG__
+#ifdef __DEBUG_PQ
     void stp_pq_printq(stp_queue_t *pq);
 #endif
 
