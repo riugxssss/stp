@@ -8,3 +8,4 @@
 6) Fix max size queue with preprocessor directive
 7) Make it portable on Windows
 8) Add more debugging messages
+9) Check the create_pool func the atomic side

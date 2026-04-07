@@ -115,8 +115,9 @@ int stp_pq_remove(stp_queue_t *pq);
 void stp_pq_destroyq(stp_queue_t **pq);
 int stp_pq_check_full(stp_queue_t *pq);
 
-#ifdef __DEBUG_PQ
+#ifdef __QUEUEDEB_
     void stp_pq_printq(stp_queue_t *pq);
+    int stp_pq_check_full(stp_queue_t *pq);   
 #endif
 
 

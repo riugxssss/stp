@@ -18,14 +18,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
-#ifdef _DEBUG
-# define PRINT_MSG(x)           fprintf(stdout, "%s\n", x )
-# define PRINT_INFO(f1, f2)     fprintf(stdout, "%s | %d\n", f1, f2)
-#define __DEBUG_PQ
-#else
-#define PRINT_MSG(x)            ((void)0)
-#define PRINT_INFO(f1, f2)      ((void)0)
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +25,19 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #include <assert.h>
 #include <unistd.h>
 #include <stdatomic.h>
+
+
+/*If the DEBUG is defined it will print info msgs 
+of the STDOUT stream (your terminal)*/
+
+#if defined _DEBUG
+# define PRINT_MSG(x)           printf("%s\n", x )
+# define PRINT_INFO(f1, f2)     printf("%s | %d\n", f1, f2)
+# define __QUEUEDEB_
+#else
+# define PRINT_MSG(x)            ((void)0)
+# define PRINT_INFO(f1, f2)      ((void)0)
+#endif
 
 #include "../include/stp_threadpool.h"
 #include "../include/stp_queue.h"
@@ -52,6 +57,8 @@ typedef struct stp_tp{
     pthread_t *threads; /*Actual threads*/
     stp_queue_t *pq; /*Priority queue*/
     long total_threads; /*Total threads used*/
+    uint8_t shutdown_mode; /*Mode ? graceful : immediate*/
+    long active_workers;
 }stp_tp_t;
 
 /*
@@ -65,23 +72,42 @@ static void *stp_tp_work(void *arg){
     stp_tp_t *pool = (stp_tp_t*)arg;
 
     while (1){
-    pthread_mutex_lock(&pool->lock);
+        pthread_mutex_lock(&pool->lock);
 
-    while (pool->pq->tot_task == 0){
-        pthread_cond_wait(&pool->working, &pool->lock);
-    }
+        while (pool->pq->tot_task == 0 && pool->shutdown_mode == 0){
+            pthread_cond_wait(&pool->working, &pool->lock);
+        } 
+        
+        if (pool->shutdown_mode == IMM_MODE){
+            pthread_mutex_unlock(&pool->lock);
+            break;
+        }
 
-    stp_item_t *ptr = stp_pq_peek(pool->pq);
-    stp_pq_remove(pool->pq);
+        if (pool->shutdown_mode == GRC_MODE && pool->pq->tot_task == 0){
+            pthread_mutex_unlock(&pool->lock);
+            break;
+        }
 
-    if (pool->pq->tot_task == 0){
-        pthread_cond_signal(&pool->done);
-    }
+        stp_item_t *ptr = stp_pq_peek(pool->pq);
+        stp_pq_remove(pool->pq);
 
-    pthread_mutex_unlock(&pool->lock);
+        pool->active_workers++;
 
-    ptr->task(ptr->args);
-    }
+        pthread_mutex_unlock(&pool->lock);
+
+        ptr->task(ptr->args);
+
+        pthread_mutex_lock(&pool->lock);
+
+        pool->active_workers--;
+
+        if (pool->pq->tot_task == 0 && pool->active_workers == 0){
+            pthread_cond_broadcast(&pool->done);
+        }
+
+        pthread_mutex_unlock(&pool->lock);
+
+        }
     return NULL;
 }
 
@@ -117,11 +143,11 @@ stp_tp_t *stp_create_pool(int total_threads, uint16_t queue_size){
     int systot_threads = (int) GET_TOTSYS_THREAD;
 
     //Setting a limit
-    systot_threads *= 2;
+    int limit = systot_threads * 2;
     
     /*If the input is greater than the limit
     we set a proper default value*/
-    if (total_threads > systot_threads){
+    if (total_threads > limit){
         #ifdef _DEBUG
         #warning "[!] The input variable for the threads can be inefficient"
         #endif
@@ -131,6 +157,9 @@ stp_tp_t *stp_create_pool(int total_threads, uint16_t queue_size){
 
     /*Initializating the thread pool*/
 
+    //Mode
+    pool->shutdown_mode = 0;
+
     //Tot threads
     pool->total_threads = total_threads;
 
@@ -138,21 +167,22 @@ stp_tp_t *stp_create_pool(int total_threads, uint16_t queue_size){
     pool->pq = stp_pq_create(queue_size);
 
     //Allocating space for threads
-    pool->threads = (pthread_t *) malloc(sizeof(pthread_t *) * total_threads);
+    pool->threads = (pthread_t *) malloc(sizeof(pthread_t) * total_threads);
     CHECK_ALLOC(pool->threads);
 
-    //Creating threads
-    for (int i = 0; i < total_threads;i++){
-        pthread_create(&pool->threads[i], NULL, stp_tp_work, pool);
-    }
-
-    //Allocating the syncro variables
+        //Allocating the syncro variables
     if (pthread_mutex_init(&pool->lock, NULL) != 0)
         return (void*)STP_FAIL;
     if (pthread_cond_init(&pool->done, NULL) != 0 ||
         pthread_cond_init(&pool->working, NULL) != 0){
-            return (void*)STP_FAIL;
+        return (void*)STP_FAIL;
     }
+
+
+    //Creating threads
+    for (int i = 0; i < total_threads;i++){
+        pthread_create(&pool->threads[i], NULL, stp_tp_work, pool);
+    } 
 
     /*From https://en.cppreference.com/w/c/atomic/atomic_store.html
     Atomically replaces the value of the atomic variable pointed to by obj with desired.
@@ -165,6 +195,18 @@ stp_tp_t *stp_create_pool(int total_threads, uint16_t queue_size){
 
 
     return pool;
+}
+
+void stp_tp_start(stp_tp_t *pool){
+    if (pool == NULL){
+        return;
+    }
+
+    pthread_mutex_lock(&pool->lock);
+
+    pthread_cond_broadcast(&pool->working);
+
+    pthread_mutex_unlock(&pool->lock);
 }
 
 /*
@@ -182,7 +224,10 @@ int stp_tp_add(stp_tp_t *pool, void (*task)(void *), void *args, uint16_t priori
 
     /*Inserting in the priority queue and waking the threads on the
     condition variable to execute scheduled jobs*/
-    if (stp_pq_insert(pool->pq, task, args, priority) == STP_I_SUCC){
+    if (stp_pq_insert(pool->pq, task, args, priority) == STP_I_FAIL){
+        pthread_mutex_unlock(&pool->lock);
+        return STP_I_FAIL;
+    }else{
         pthread_cond_broadcast(&pool->working);
     }
 
@@ -200,7 +245,7 @@ int stp_tp_wait(stp_tp_t *pool){
 
     pthread_mutex_lock(&pool->lock);
 
-    while (pool->pq->tot_task > 0){
+    while (pool->pq->tot_task > 0 || pool->active_workers > 0){
         pthread_cond_wait(&pool->done, &pool->lock);
     }
 
@@ -215,18 +260,30 @@ int stp_tp_wait(stp_tp_t *pool){
 
 The usage of this function is to free the entire thread pool*/
 
-void stp_tp_free(stp_tp_t **pool){
+void stp_tp_free(stp_tp_t **pool, uint8_t mode){
     if (pool == NULL || *pool == NULL)
         return;
+    if (mode != GRC_MODE && mode != IMM_MODE){
+        fprintf(stderr, "[!] Invalid mode entered selected\n");
+        return;
+    }
     
-    stp_tp_wait(*pool);
 
-    PRINT_MSG("FREEING ALL");
+    stp_tp_wait(*pool);
+   
+    pthread_mutex_lock(&(*pool)->lock);
+
+    (*pool)->shutdown_mode = mode;
+    pthread_cond_broadcast(&(*pool)->working);
+    
+    pthread_mutex_unlock(&(*pool)->lock);
 
     for (int i = 0;i < (*pool)->total_threads;i++){
-        pthread_cancel((*pool)->threads[i]);
+
         pthread_join((*pool)->threads[i], NULL);
     }
+
+    PRINT_MSG("FREEING ALL");
 
     /*Setting total threads field to 0*/
     (*pool)->total_threads = 0;

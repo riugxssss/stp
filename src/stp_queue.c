@@ -282,16 +282,11 @@ int stp_pq_check_property(stp_queue_t *pq){
 }
 
 
-int stp_pq_check_full(stp_queue_t *pq){
-    return pq->queue_size == pq->tot_task;
-}
-
-
-/*Only used if the __DEBUG__ macro is defined
+/*Only used if the __QUEUEDEB__ macro is defined
  * it print the entire array and allows to see the queue*/
 
 
-#ifdef __DEBUG__
+#ifdef __QUEUEDEB__
 
 void stp_pq_printq(stp_queue_t *pq){
     if (pq == NULL || pq->pq_arr == NULL)
@@ -302,6 +297,10 @@ void stp_pq_printq(stp_queue_t *pq){
     for (int i = 0; i < pq->tot_task;i++){
         printf("[%d] %d\n", i , pq->pq_arr[i]);
     }
+}
+
+int stp_pq_check_full(stp_queue_t *pq){
+    return pq->queue_size == pq->tot_task;
 }
 
 #endif
